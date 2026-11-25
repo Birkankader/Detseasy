@@ -142,6 +142,14 @@ export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 npm run electron:build:win -- --publish always
 ```
 
+> **`build/icon.ico` silinmemeli.** macOS'ta (Catalina+) electron-builder NSIS kaldırıcısını
+> kendisi üretir ve kaldırıcı simgesini yamalamaz; kurulum ve kaldırma simgeleri farklıysa
+> (simgesiz build'de NSIS varsayılanları farklıdır) kaldırıcının CRC'si tutmaz: elle
+> kaldırmada "NSIS Error", güncellemede "Failed to uninstall old application files: 2".
+> `build/icon.ico` ikisini aynı yapar. `build/installer.nsh` ise v0.1.6 ve öncesinin bozuk
+> kaldırıcısı başarısız olunca kurulumu durdurmadan dosyaların üzerine kurar.
+> Mac'ten Windows build'i için Rosetta gerekir (`softwareupdate --install-rosetta`).
+
 Sonra GitHub'da release'i "Draft" → "Published" yapın. Açık olan tüm Detseasy
 örnekleri 30 dk içinde otomatik tetiklenir; banner indirme progress'i gösterir,
 kullanıcı tek tıkla yükler.
