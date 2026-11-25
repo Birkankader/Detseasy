@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('DETSEASY', {
     get: () => ipcRenderer.invoke('closures:get'),
     check: () => ipcRenderer.invoke('closures:check'),
     markViewed: () => ipcRenderer.invoke('closures:mark-viewed'),
+    lookup: (no) => ipcRenderer.invoke('closures:lookup', no),
+    onLookupProgress: (cb) => listen('closures:lookup-progress', cb),
     onState: (cb) => listen('closures:state', cb),
     onOpen: (cb) => listen('closures:open', cb),
   },

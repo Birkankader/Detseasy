@@ -14,8 +14,11 @@ DETSİS (Devlet Teşkilatı Merkezi Kayıt Sistemi) birimlerini filtreleyip ince
 - Tüm sayfalar önden çekilir, sayfalama anlık (client-side slice)
 - Tablo sıralaması, sonuçlarda metin arama (tr locale)
 - CSV (Excel uyumlu, UTF-8 BOM, `;` ayraç) ve JSON indirme
-- **Kapanan birim takibi**: günde bir kez DETSİS'te kapanan birimler taranır; yeni kapanış
-  varsa masaüstü bildirimi + rapor paneli (idare düzeyindekiler en üstte)
+- **Değişen birim takibi**: günde bir kez DETSİS'te kapanan, yeniden açılan ve yeri (üst birimi)
+  değişen birimler taranır; yeni kayıt varsa masaüstü bildirimi + rapor paneli (idare
+  düzeyindekiler en üstte)
+- **DETSİS No sorgulama**: artık bulunamayan ya da değişmiş bir numaraya ne olduğu (kapanış
+  tarihi, ad/üst birim değişiklikleri, yeniden açılma, numarayı şu an taşıyan birim)
 - **Sistem tepsisi**: pencere kapanınca uygulama tepside çalışmaya devam eder; isteğe bağlı
   bilgisayar açılınca (gizli) başlatma
 
@@ -56,10 +59,12 @@ npm run electron:build:linux   # Linux (.AppImage + .deb)
 - **Main process**: `electron/main.cjs` — uygulama açılırken localhost'ta rastgele portta HTTP proxy başlatır: `/detsis/...` → `https://yetkiliapi.detsis.gov.tr/...`. Detsis'in talep ettiği `Origin`, `Referer`, `User-Agent` başlıklarını enjekte eder.
 - **Preload**: `electron/preload.cjs` — port bilgisini renderer'a `window.DETSIS_PROXY_BASE` olarak verir. `src/api.js` bunu okur; tarayıcı dev modunda fallback olarak `/detsis` (Vite proxy) kullanır.
 
-## Kapanan Birim Takibi
+## Değişen Birim Takibi
 
-Header'daki **Kapanan Birimler** butonu raporu açar; rozet okunmamış yeni kapanış sayısını
-gösterir (kırmızı = aralarında idare düzeyinde kapanış var).
+Header'daki **Değişen Birimler** butonu paneli açar; rozet okunmamış yeni kayıt sayısını gösterir
+(kırmızı = aralarında idare düzeyinde kapanış ya da yer değişikliği var). Panelde iki sekme var:
+**Günlük raporlar** (gruplar: İdare düzeyi kapananlar, Yeniden açılan, Yeri değişen, Diğer
+kapananlar) ve **DETSİS No sorgula**.
 
 - **Kaynak**: DETSİS "Birim Değişiklikleri" sayfasının kullandığı uç noktalar:
   `kapatilanbirimler/{gün}` (son N günde kapananlar) + `birimislemkunye/{birimTarihceId}`
@@ -71,6 +76,20 @@ gösterir (kırmızı = aralarında idare düzeyinde kapanış var).
   **Değişen (yeniden açılan)** grubunda kapanıştaki ve bugünkü haliyle, neyin değiştiğiyle
   (ad, üst birim, statü, kategori, DETSİS no) listelenir. Kapandı bildirilen bir birim sonradan
   açılırsa ayrıca bildirim gelir. CSV'de Durum, güncel ad/hiyerarşi ve değişiklik sütunları var.
+- **Yeri değişen**: `guncellenenbirimler/{gün}` her düzenlenen birimi listeler,
+  `guncellenenbirimbilgi/{id}` hangi alanların değiştiğini verir. `HiyerarsikUstBirimAdi`
+  değişen adaylar için değişiklikten bir gün önceki ve değişiklik günündeki `birimkunye`
+  karşılaştırılır; üst birimin **kimliği** farklıysa birim taşınmış sayılır (üst birimin yalnızca
+  adı değiştiyse alt birimlerde de aynı kayıt oluşur, bunlar elenir). Ayda ~300 kayıt; raporda
+  eski → yeni üst birim, önceki hiyerarşi ve aynı gün değişen ad/statü gösterilir. Bu özellik
+  eklenmeden önceki kurulumlarda ilk yer değişikliği taraması bildirimsiz "ilk tarama" raporudur.
+- **DETSİS No sorgula**: kapanış arşivi (DETSİS'in listelediği 2016'dan bu yana ~25 bin kapanış)
+  bir kez indirilir (`userData/kapanis-arsivi.json`, ~2 MB, ilk sefer ~2 dk; günlük kontrolden
+  sonra arka planda) ve sonra her gün yeni kapanışlarla güncellenir. Sorgu: numarayı şu an taşıyan
+  birim (`tumbirimler/{no}`), o kimlikteki birimin kapanış kayıtları ve kapanıştaki künyesi,
+  `guncellenenbirimbilgi` değişiklik geçmişi (açıldı, ad, üst birim, statü, kategori, adres) ve
+  bugünkü künyesi. DETSİS no ile birim kimliği farklı olabilir (numara başka birime geçebiliyor);
+  sonuç bunu ayrıca belirtir.
 - **Zamanlama**: main process (`electron/closures.cjs`) uygulama açılışından birkaç saniye sonra
   ve sonra her 30 dk'da bakar; o takvim gününde başarılı kontrol yoksa tarar. Yani günde bir
   kontrol; hata olursa 30 dk sonra tekrar dener. Panelde **Şimdi kontrol et** ile elle tetiklenir.
@@ -97,7 +116,7 @@ kontrolü pencere kapalıyken de sürer.
   çalışır. İlk seferde bunu anlatan bir bildirim çıkar. Tamamen kapatmak: tepsi menüsü →
   **Çıkış**. Bu davranış menüdeki **Pencere kapanınca tepside çalış** ile kapatılabilir.
   macOS'ta uygulama zaten pencere kapansa da çalışmaya devam eder.
-- **Tepsi menüsü**: Detseasy'yi aç, Kapanan Birimler (okunmamış sayısıyla), Şimdi kontrol et,
+- **Tepsi menüsü**: Detseasy'yi aç, Değişen Birimler (okunmamış sayısıyla), Şimdi kontrol et,
   Bilgisayar açılınca başlat, indirilmiş güncelleme varsa Güncellemeyi yükle, Çıkış.
   Windows'ta simgeye sol tıklamak pencereyi açar; okunmamış kapanış varsa simgede kırmızı nokta
   belirir (macOS'ta simgenin yanında sayı).

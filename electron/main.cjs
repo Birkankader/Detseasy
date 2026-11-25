@@ -243,26 +243,31 @@ function nameList(names, total) {
   return names.join(', ') + (total > names.length ? ` ve ${total - names.length} birim daha` : '')
 }
 
-// Reopened-at-report-time items (durum 'degisti') are counted apart from
-// real closures.
+// Real closures first; reopened-at-report-time items (durum 'degisti') and
+// moves (tur 'tasima') are counted apart.
 function notifyClosures(report) {
-  const closed = report.items.filter((i) => i.durum !== 'degisti')
-  const changed = report.items.length - closed.length
-  if (closed.length === 0) {
-    notify(
-      `DETSİS: ${changed} birim değişti`,
-      nameList(report.items.slice(0, 3).map((i) => i.birimAdi), changed),
-      showClosures
-    )
-    return
+  const moved = report.items.filter((i) => i.tur === 'tasima')
+  const closures = report.items.filter((i) => i.tur !== 'tasima')
+  const closed = closures.filter((i) => i.durum !== 'degisti')
+  const changed = closures.length - closed.length
+  const parts = []
+  if (closed.length) {
+    const idare = closed.filter((i) => i.idare).length
+    parts.push(`${closed.length} birim kapandı` + (idare ? ` (${idare} idare)` : ''))
   }
-  const idare = closed.filter((i) => i.idare)
-  const shown = (idare.length ? idare : closed).slice(0, 3).map((i) => i.birimAdi)
-  notify(
-    `DETSİS: ${closed.length} birim kapandı` + (idare.length ? ` (${idare.length} idare)` : ''),
-    nameList(shown, closed.length) + (changed ? ` · ${changed} birim değişti` : ''),
-    showClosures
-  )
+  if (changed) parts.push(`${changed} birim değişti`)
+  if (moved.length) parts.push(`${moved.length} birimin yeri değişti`)
+
+  let body
+  if (closed.length) {
+    const idare = closed.filter((i) => i.idare)
+    body = nameList((idare.length ? idare : closed).slice(0, 3).map((i) => i.birimAdi), closed.length)
+  } else if (changed) {
+    body = nameList(closures.slice(0, 3).map((i) => i.birimAdi), changed)
+  } else {
+    body = nameList(moved.slice(0, 2).map((i) => `${i.birimAdi} → ${i.yeniUst}`), moved.length)
+  }
+  notify(`DETSİS: ${parts.join(' · ')}`, body, showClosures)
 }
 
 function notifyReopened(items) {
@@ -279,6 +284,7 @@ function notifyReopened(items) {
 function startClosureWatcher() {
   closureWatcher = createClosureWatcher({
     statePath: path.join(app.getPath('userData'), 'kapanan-birimler.json'),
+    archivePath: path.join(app.getPath('userData'), 'kapanis-arsivi.json'),
     upstream: UPSTREAM,
     origin: ORIGIN,
     userAgent: UA,
@@ -398,7 +404,7 @@ function updateTray() {
   const template = [
     { label: "Detseasy'yi aç", click: () => showWindow() },
     {
-      label: unread ? `Kapanan Birimler (${unread} yeni)` : 'Kapanan Birimler',
+      label: unread ? `Değişen Birimler (${unread} yeni)` : 'Değişen Birimler',
       click: () => showClosures(),
     },
     {
@@ -446,7 +452,7 @@ function updateTray() {
     : snap.lastSuccessAt
     ? `son kontrol ${fmtTime(snap.lastSuccessAt)}`
     : 'ilk kontrol bekleniyor'
-  tray.setToolTip(`Detseasy · ${status}` + (unread ? ` · ${unread} yeni kapanış` : ''))
+  tray.setToolTip(`Detseasy · ${status}` + (unread ? ` · ${unread} yeni değişiklik` : ''))
   if (process.platform === 'darwin') {
     tray.setTitle(unread ? String(unread) : '')
   } else if (trayUnread !== unread > 0) {
@@ -460,7 +466,7 @@ async function checkFromTray() {
   // New closures and reopenings raise their own notifications.
   if (!result.ok) notify('DETSİS kontrolü başarısız', result.error)
   else if (!result.newCount && !result.reopenedCount) {
-    notify('DETSİS kontrol edildi', 'Yeni kapanış yok.')
+    notify('DETSİS kontrol edildi', 'Yeni değişiklik yok.')
   }
 }
 
@@ -543,6 +549,19 @@ ipcMain.handle('closures:check', async () => {
   return closureWatcher.snapshot()
 })
 ipcMain.handle('closures:mark-viewed', () => closureWatcher.markViewed())
+// Errors come back as data: an invoke rejection would prefix the message.
+ipcMain.handle('closures:lookup', async (event, no) => {
+  try {
+    const result = await closureWatcher.lookup(no, {
+      onProgress: (p) => {
+        if (!event.sender.isDestroyed()) event.sender.send('closures:lookup-progress', p)
+      },
+    })
+    return { ok: true, result }
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) }
+  }
+})
 
 async function startup() {
   // Windows only shows toasts for an AppUserModelID matching the installer's
