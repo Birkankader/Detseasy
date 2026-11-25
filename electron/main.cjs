@@ -4,14 +4,19 @@
 // Uses electron-updater + GitHub Releases for automatic update download &
 // install on Windows NSIS builds. The renderer drives the install UX via
 // IPC messages.
+//
+// Also runs the daily closed-unit watcher (closures.cjs) and raises a desktop
+// notification when DETSİS reports new closures.
 
-const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog, Notification } = require('electron')
 const path = require('node:path')
 const http = require('node:http')
 const https = require('node:https')
 const { URL } = require('node:url')
 const { autoUpdater } = require('electron-updater')
+const { createClosureWatcher } = require('./closures.cjs')
 
+const APP_ID = 'com.birkankader.detseasy'
 const UPSTREAM = 'https://yetkiliapi.detsis.gov.tr'
 const ORIGIN = 'https://yetkili.detsis.gov.tr'
 const UA =
@@ -25,6 +30,9 @@ const isDev = process.env.ELECTRON_DEV === '1'
 let proxyPort = 0
 let mainWin = null
 let lastUpdateState = null // last payload pushed to renderer (for re-emits)
+let closureWatcher = null
+let closureNotification = null // keep a ref: a GC'd notification drops its click handler
+let openClosuresOnLoad = false // notification clicked while no window was open
 
 // ---- HTTP proxy --------------------------------------------------------------
 
@@ -174,6 +182,56 @@ async function checkForUpdates(userTriggered = false) {
   }
 }
 
+// ---- Kapanan birim takibi ----------------------------------------------------
+
+function showClosures() {
+  if (mainWin && !mainWin.isDestroyed()) {
+    if (mainWin.isMinimized()) mainWin.restore()
+    mainWin.show()
+    mainWin.focus()
+    mainWin.webContents.send('closures:open')
+  } else {
+    // Renderer picks this up via closures:get once it mounts.
+    openClosuresOnLoad = true
+    createWindow()
+  }
+}
+
+function notifyClosures(report) {
+  if (!Notification.isSupported()) return
+  const idare = report.items.filter((i) => i.idare)
+  const shown = (idare.length ? idare : report.items).slice(0, 3).map((i) => i.birimAdi)
+  const rest = report.items.length - shown.length
+  closureNotification = new Notification({
+    title:
+      `DETSİS: ${report.items.length} birim kapandı` +
+      (idare.length ? ` (${idare.length} idare)` : ''),
+    body: shown.join(', ') + (rest > 0 ? ` ve ${rest} birim daha` : ''),
+  })
+  closureNotification.on('click', showClosures)
+  closureNotification.show()
+}
+
+function startClosureWatcher() {
+  closureWatcher = createClosureWatcher({
+    statePath: path.join(app.getPath('userData'), 'kapanan-birimler.json'),
+    upstream: UPSTREAM,
+    origin: ORIGIN,
+    userAgent: UA,
+    onChange: (snapshot) => {
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('closures:state', snapshot)
+      }
+    },
+    // The first-ever check is a baseline, and a manual check happens with the
+    // panel open; neither needs a desktop notification.
+    onReport: (report, { manual }) => {
+      if (!manual && !report.initial) notifyClosures(report)
+    },
+  })
+  closureWatcher.start()
+}
+
 // ---- App lifecycle -----------------------------------------------------------
 
 async function createWindow() {
@@ -243,8 +301,29 @@ ipcMain.handle('update:open', (_evt, url) => {
   if (typeof url === 'string') shell.openExternal(url)
 })
 
+// IPC: closed-unit reports.
+ipcMain.handle('closures:get', () => {
+  const snapshot = closureWatcher.snapshot()
+  if (openClosuresOnLoad) {
+    openClosuresOnLoad = false
+    snapshot.openRequested = true
+  }
+  return snapshot
+})
+ipcMain.handle('closures:check', async () => {
+  await closureWatcher.check({ manual: true })
+  return closureWatcher.snapshot()
+})
+ipcMain.handle('closures:mark-viewed', () => closureWatcher.markViewed())
+
 app.whenReady().then(() => {
+  // Windows only shows toasts for an AppUserModelID matching the installer's
+  // shortcut (electron-builder uses appId).
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(app.isPackaged ? APP_ID : process.execPath)
+  }
   configureUpdater()
+  startClosureWatcher()
   createWindow()
 })
 

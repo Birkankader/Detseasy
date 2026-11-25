@@ -1,4 +1,4 @@
-// Preload — exposes proxy port + updater bridge to the renderer.
+// Preload — exposes proxy port + updater and closed-unit bridges to the renderer.
 
 const { contextBridge, ipcRenderer } = require('electron')
 
@@ -34,5 +34,12 @@ contextBridge.exposeInMainWorld('DETSEASY', {
     check: () => ipcRenderer.invoke('update:check'),
     install: () => ipcRenderer.invoke('update:install'),
     openUrl: (url) => ipcRenderer.invoke('update:open', url),
+  },
+  closures: {
+    get: () => ipcRenderer.invoke('closures:get'),
+    check: () => ipcRenderer.invoke('closures:check'),
+    markViewed: () => ipcRenderer.invoke('closures:mark-viewed'),
+    onState: (cb) => listen('closures:state', cb),
+    onOpen: (cb) => listen('closures:open', cb),
   },
 })

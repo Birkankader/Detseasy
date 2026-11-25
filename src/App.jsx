@@ -12,6 +12,7 @@ import {
 } from './api.js'
 import Tree from './Tree.jsx'
 import UpdateBanner from './UpdateBanner.jsx'
+import ClosuresPanel from './ClosuresPanel.jsx'
 
 const PAGE_SIZE_OPTIONS = [15, 25, 50, 100, 250, 500, 1000]
 const QUICK_PRESETS = [
@@ -543,6 +544,7 @@ export default function App() {
         <span className="sub">
           API limit 100/sayfa · sonuçlar geldikçe ekrana akar, sayfalama anlık
         </span>
+        <ClosuresPanel />
       </header>
 
       <form className="filters" onSubmit={onSubmit}>

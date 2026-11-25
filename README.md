@@ -14,6 +14,8 @@ DETSİS (Devlet Teşkilatı Merkezi Kayıt Sistemi) birimlerini filtreleyip ince
 - Tüm sayfalar önden çekilir, sayfalama anlık (client-side slice)
 - Tablo sıralaması, sonuçlarda metin arama (tr locale)
 - CSV (Excel uyumlu, UTF-8 BOM, `;` ayraç) ve JSON indirme
+- **Kapanan birim takibi**: günde bir kez DETSİS'te kapanan birimler taranır; yeni kapanış
+  varsa masaüstü bildirimi + rapor paneli (idare düzeyindekiler en üstte)
 
 ## Geliştirme
 
@@ -51,6 +53,31 @@ npm run electron:build:linux   # Linux (.AppImage + .deb)
 - **Renderer**: React 18 + Vite, `src/` altında.
 - **Main process**: `electron/main.cjs` — uygulama açılırken localhost'ta rastgele portta HTTP proxy başlatır: `/detsis/...` → `https://yetkiliapi.detsis.gov.tr/...`. Detsis'in talep ettiği `Origin`, `Referer`, `User-Agent` başlıklarını enjekte eder.
 - **Preload**: `electron/preload.cjs` — port bilgisini renderer'a `window.DETSIS_PROXY_BASE` olarak verir. `src/api.js` bunu okur; tarayıcı dev modunda fallback olarak `/detsis` (Vite proxy) kullanır.
+
+## Kapanan Birim Takibi
+
+Header'daki **Kapanan Birimler** butonu raporu açar; rozet okunmamış yeni kapanış sayısını
+gösterir (kırmızı = aralarında idare düzeyinde kapanış var).
+
+- **Kaynak**: DETSİS "Birim Değişiklikleri" sayfasının kullandığı uç noktalar:
+  `kapatilanbirimler/{gün}` (son N günde kapananlar) + `birimislemkunye/{birimTarihceId}`
+  (hiyerarşi, kategori, statü, adres).
+- **Zamanlama**: main process (`electron/closures.cjs`) uygulama açılışından birkaç saniye sonra
+  ve sonra her 30 dk'da bakar; o takvim gününde başarılı kontrol yoksa tarar. Yani günde bir
+  kontrol; hata olursa 30 dk sonra tekrar dener. Panelde **Şimdi kontrol et** ile elle tetiklenir.
+- **Fark alma**: her kontrol son 30 günü çeker (uzun süre kapalı kaldıysa 90 güne kadar),
+  daha önce raporlanmış kapanışları eler. Geriye tarihli girilen kapanışlar da yakalanır.
+  Kapanış birim id + kapanış günü ile tanımlanır.
+- **İlk çalıştırma**: son 30 günün kapanışları "ilk tarama" raporu olarak gelir; bildirim
+  gönderilmez, rozete sayılmaz.
+- **İdare düzeyi**: DETSİS'in "ANA KURUM VE KURULUŞ" grubundaki kategoriler (Bakanlık,
+  Belediye, Bağlı/İlgili/İlişkili Kuruluş, Yükseköğretim Kurumu, İl Özel İdaresi, …) + Şirket,
+  Mahalli Birlik, Mülki İdare Teşkilatı. Liste: `IDARE_KATEGORILERI` (`electron/closures.cjs`).
+- **Durum dosyası**: `userData/kapanan-birimler.json` (son 60 rapor + görülen kapanışlar).
+- **Kısıt**: yalnızca uygulama çalışırken kontrol eder. Windows/Linux'ta pencere kapanınca
+  uygulama kapanır; macOS'ta pencere kapansa da uygulama arka planda kontrol etmeye devam eder.
+  Kapalı geçen günler bir sonraki açılışta telafi edilir. Açık API ileri tarihli kapanış
+  göstermiyor (negatif gün sorgusu boş döner); kapanış listeye kapanış tarihi gelince düşer.
 
 ## Otomatik Güncelleme
 
