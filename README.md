@@ -16,6 +16,8 @@ DETSİS (Devlet Teşkilatı Merkezi Kayıt Sistemi) birimlerini filtreleyip ince
 - CSV (Excel uyumlu, UTF-8 BOM, `;` ayraç) ve JSON indirme
 - **Kapanan birim takibi**: günde bir kez DETSİS'te kapanan birimler taranır; yeni kapanış
   varsa masaüstü bildirimi + rapor paneli (idare düzeyindekiler en üstte)
+- **Sistem tepsisi**: pencere kapanınca uygulama tepside çalışmaya devam eder; isteğe bağlı
+  bilgisayar açılınca (gizli) başlatma
 
 ## Geliştirme
 
@@ -74,10 +76,33 @@ gösterir (kırmızı = aralarında idare düzeyinde kapanış var).
   Belediye, Bağlı/İlgili/İlişkili Kuruluş, Yükseköğretim Kurumu, İl Özel İdaresi, …) + Şirket,
   Mahalli Birlik, Mülki İdare Teşkilatı. Liste: `IDARE_KATEGORILERI` (`electron/closures.cjs`).
 - **Durum dosyası**: `userData/kapanan-birimler.json` (son 60 rapor + görülen kapanışlar).
-- **Kısıt**: yalnızca uygulama çalışırken kontrol eder. Windows/Linux'ta pencere kapanınca
-  uygulama kapanır; macOS'ta pencere kapansa da uygulama arka planda kontrol etmeye devam eder.
-  Kapalı geçen günler bir sonraki açılışta telafi edilir. Açık API ileri tarihli kapanış
-  göstermiyor (negatif gün sorgusu boş döner); kapanış listeye kapanış tarihi gelince düşer.
+- **Kısıt**: yalnızca uygulama çalışırken kontrol eder (pencere kapalıyken tepside çalışma için
+  aşağıya bakın). Kapalı geçen günler bir sonraki açılışta telafi edilir. Açık API ileri
+  tarihli kapanış göstermiyor (negatif gün sorgusu boş döner); kapanış listeye kapanış tarihi
+  gelince düşer.
+
+### Sistem tepsisi
+
+Windows ve macOS'ta tepside (macOS: menü çubuğunda) Detseasy simgesi durur; kapanan birim
+kontrolü pencere kapalıyken de sürer.
+
+- **Pencereyi kapatmak** uygulamayı kapatmaz (Windows): pencere kapanır, uygulama tepside
+  çalışır. İlk seferde bunu anlatan bir bildirim çıkar. Tamamen kapatmak: tepsi menüsü →
+  **Çıkış**. Bu davranış menüdeki **Pencere kapanınca tepside çalış** ile kapatılabilir.
+  macOS'ta uygulama zaten pencere kapansa da çalışmaya devam eder.
+- **Tepsi menüsü**: Detseasy'yi aç, Kapanan Birimler (okunmamış sayısıyla), Şimdi kontrol et,
+  Bilgisayar açılınca başlat, indirilmiş güncelleme varsa Güncellemeyi yükle, Çıkış.
+  Windows'ta simgeye sol tıklamak pencereyi açar; okunmamış kapanış varsa simgede kırmızı nokta
+  belirir (macOS'ta simgenin yanında sayı).
+- **Bilgisayar açılınca başlat**: yalnızca kurulu sürümde (dev/portable'da yok). Windows'ta
+  `HKCU\…\Run` kaydına `--hidden` ile eklenir, açılışta pencere açılmadan tepside başlar.
+  macOS'ta Giriş Öğeleri'ne eklenir (macOS 13+ onay isteyebilir) ve pencereyle açılır.
+  Uygulama kaldırılırken bu kayıt silinmez; kaldırmadan önce menüden kapatın.
+- **Tek örnek**: uygulama tepsideyken kısayoldan yeniden açmak yeni kopya başlatmaz, mevcut
+  pencereyi açar.
+- **Güncelleme**: tepsideyken indirilen güncelleme bildirimle haber verilir; tıklayınca ya da
+  menüden yüklenir.
+- **Ayarlar**: `userData/settings.json`.
 
 ## Otomatik Güncelleme
 

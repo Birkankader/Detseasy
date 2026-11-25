@@ -183,9 +183,11 @@ export default function ClosuresPanel() {
             </div>
 
             <p className="cl-note">
-              Uygulama açıkken DETSİS "Kapatılan Birimler" listesi günde bir kez taranır. Daha önce
-              raporlanmamış kapanışlar yeni rapor olarak eklenir ve masaüstü bildirimi gönderilir.
-              İdare düzeyindeki kapanışlar her raporda en üstte listelenir.
+              Uygulama çalıştığı sürece (pencere kapalıyken de, sistem tepsisinde) DETSİS
+              "Kapatılan Birimler" listesi günde bir kez taranır. Daha önce raporlanmamış kapanışlar
+              yeni rapor olarak eklenir ve masaüstü bildirimi gönderilir. İdare düzeyindeki
+              kapanışlar her raporda en üstte listelenir. Bilgisayar açılınca başlatmak için tepsi
+              simgesinin menüsünü kullanın.
             </p>
 
             {snap?.lastError && (
