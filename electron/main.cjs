@@ -239,14 +239,39 @@ function showClosures() {
   }
 }
 
+function nameList(names, total) {
+  return names.join(', ') + (total > names.length ? ` ve ${total - names.length} birim daha` : '')
+}
+
+// Reopened-at-report-time items (durum 'degisti') are counted apart from
+// real closures.
 function notifyClosures(report) {
-  const idare = report.items.filter((i) => i.idare)
-  const shown = (idare.length ? idare : report.items).slice(0, 3).map((i) => i.birimAdi)
-  const rest = report.items.length - shown.length
+  const closed = report.items.filter((i) => i.durum !== 'degisti')
+  const changed = report.items.length - closed.length
+  if (closed.length === 0) {
+    notify(
+      `DETSİS: ${changed} birim değişti`,
+      nameList(report.items.slice(0, 3).map((i) => i.birimAdi), changed),
+      showClosures
+    )
+    return
+  }
+  const idare = closed.filter((i) => i.idare)
+  const shown = (idare.length ? idare : closed).slice(0, 3).map((i) => i.birimAdi)
   notify(
-    `DETSİS: ${report.items.length} birim kapandı` +
-      (idare.length ? ` (${idare.length} idare)` : ''),
-    shown.join(', ') + (rest > 0 ? ` ve ${rest} birim daha` : ''),
+    `DETSİS: ${closed.length} birim kapandı` + (idare.length ? ` (${idare.length} idare)` : ''),
+    nameList(shown, closed.length) + (changed ? ` · ${changed} birim değişti` : ''),
+    showClosures
+  )
+}
+
+function notifyReopened(items) {
+  notify(
+    `DETSİS: kapandı bildirilen ${items.length} birim yeniden açıldı`,
+    nameList(
+      items.slice(0, 3).map((i) => `${i.birimAdi} → ${i.guncel?.birimAdi || '?'}`),
+      items.length
+    ),
     showClosures
   )
 }
@@ -267,6 +292,9 @@ function startClosureWatcher() {
     // panel open; neither needs a desktop notification.
     onReport: (report, { manual }) => {
       if (!manual && !report.initial) notifyClosures(report)
+    },
+    onStatusChange: (items, { manual }) => {
+      if (!manual) notifyReopened(items)
     },
   })
   closureWatcher.start()
@@ -429,9 +457,11 @@ function updateTray() {
 
 async function checkFromTray() {
   const result = await closureWatcher.check()
-  // New closures raise their own notification via onReport.
+  // New closures and reopenings raise their own notifications.
   if (!result.ok) notify('DETSİS kontrolü başarısız', result.error)
-  else if (!result.newCount) notify('DETSİS kontrol edildi', 'Yeni kapanış yok.')
+  else if (!result.newCount && !result.reopenedCount) {
+    notify('DETSİS kontrol edildi', 'Yeni kapanış yok.')
+  }
 }
 
 // ---- App lifecycle -----------------------------------------------------------

@@ -907,6 +907,30 @@ tbody tr:hover { background: rgba(56, 189, 248, 0.04); }
 }
 .cl-group.idare h3 { color: #fca5a5; }
 .cl-group.idare .tablewrap { border-color: rgba(248, 113, 113, 0.6); }
+.cl-group.changed h3 { color: #fcd34d; }
+.cl-group.changed .tablewrap { border-color: rgba(252, 211, 77, 0.5); }
+.cl-group.changed td { vertical-align: top; }
+.cl-group-note { margin: -4px 0 8px; color: var(--muted); font-size: 12px; }
+.cl-sub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cl-diff { margin: 0; padding-left: 16px; font-size: 12px; min-width: 260px; }
+.cl-diff li { margin: 1px 0; }
+.cl-tag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+  font-size: 11px;
+  vertical-align: middle;
+}
 .cl-count {
   padding: 1px 8px;
   border-radius: 9px;

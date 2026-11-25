@@ -47,18 +47,27 @@ export default function ClosuresPanel() {
 
   const reports = snap?.reports || []
   const report = reports.find((r) => r.id === selectedId) || reports[0] || null
-  const idareItems = useMemo(() => (report?.items || []).filter((i) => i.idare), [report])
-  const otherItems = useMemo(() => (report?.items || []).filter((i) => !i.idare), [report])
+  const groups = useMemo(() => {
+    const items = report?.items || []
+    const closed = items.filter((i) => i.durum !== 'degisti')
+    return {
+      idare: closed.filter((i) => i.idare),
+      other: closed.filter((i) => !i.idare),
+      changed: items.filter((i) => i.durum === 'degisti'),
+    }
+  }, [report])
 
   if (!api) return null
 
   const isNew = (r) => !r.initial && (!viewedBefore || r.createdAt > viewedBefore)
 
   function reportLabel(r) {
-    const idare = r.items.filter((i) => i.idare).length
+    const changed = r.items.filter((i) => i.durum === 'degisti').length
+    const idare = r.items.filter((i) => i.idare && i.durum !== 'degisti').length
     return [
       fmtDateTime(r.createdAt),
-      `${r.items.length.toLocaleString('tr-TR')} kapanış`,
+      `${(r.items.length - changed).toLocaleString('tr-TR')} kapanış`,
+      changed ? `${changed} değişti` : null,
       idare ? `${idare} idare` : null,
       r.initial ? `ilk tarama (son ${r.windowDays} gün)` : null,
       isNew(r) ? 'YENİ' : null,
@@ -101,6 +110,7 @@ export default function ClosuresPanel() {
 
   function downloadCsv() {
     const headers = [
+      'Durum',
       'Kapanış Tarihi',
       'DETSİS No',
       'Birim Adı',
@@ -110,8 +120,14 @@ export default function ClosuresPanel() {
       'Statü',
       'Hiyerarşi',
       'Adres',
+      'Güncel Ad',
+      'Güncel DETSİS No',
+      'Güncel Hiyerarşi',
+      'Değişiklikler',
+      'Durum Kontrolü',
     ]
     const rows = report.items.map((i) => [
+      i.durum === 'degisti' ? 'Değişti' : 'Kapandı',
       fmtDay(i.kapanisTarihi),
       i.detsisNo,
       i.birimAdi,
@@ -121,6 +137,11 @@ export default function ClosuresPanel() {
       i.statu,
       i.hiyerarsi,
       i.adres,
+      i.guncel?.birimAdi,
+      i.guncel?.detsisNo,
+      i.guncel?.hiyerarsi,
+      (i.degisiklikler || []).map((d) => `${d.alan}: ${d.eski} → ${d.yeni}`).join('; '),
+      fmtDateTime(i.durumKontrol),
     ])
     const csv = '﻿' + [headers, ...rows].map((r) => r.map(csvCell).join(';')).join('\r\n')
     triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileBase() + '.csv')
@@ -186,8 +207,10 @@ export default function ClosuresPanel() {
               Uygulama çalıştığı sürece (pencere kapalıyken de, sistem tepsisinde) DETSİS
               "Kapatılan Birimler" listesi günde bir kez taranır. Daha önce raporlanmamış kapanışlar
               yeni rapor olarak eklenir ve masaüstü bildirimi gönderilir. İdare düzeyindeki
-              kapanışlar her raporda en üstte listelenir. Bilgisayar açılınca başlatmak için tepsi
-              simgesinin menüsünü kullanın.
+              kapanışlar her raporda en üstte listelenir. Son 30 günün kapanışları her kontrolde
+              yeniden sorgulanır; DETSİS'te aynı birim yeniden açılmışsa (adı, üst birimi veya
+              statüsü değişmiş olabilir) Değişen grubuna taşınır. Bilgisayar açılınca başlatmak için
+              tepsi simgesinin menüsünü kullanın.
             </p>
 
             {snap?.lastError && (
@@ -228,13 +251,14 @@ export default function ClosuresPanel() {
 
                 <ClosureGroup
                   title="İdare düzeyi"
-                  items={idareItems}
+                  items={groups.idare}
                   empty="Bu raporda idare düzeyinde kapanış yok."
                   idare
                 />
+                <ChangedGroup items={groups.changed} />
                 <ClosureGroup
                   title="Diğer birimler"
-                  items={otherItems}
+                  items={groups.other}
                   empty="Bu raporda başka kapanış yok."
                 />
               </>
@@ -283,6 +307,83 @@ function ClosureGroup({ title, items, empty, idare = false }) {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
+// Closures DETSİS has since reopened under the same unit id: closing-time unit
+// next to the current one. Name and DETSİS no changes show in their columns.
+function ChangedGroup({ items }) {
+  return (
+    <section className="cl-group changed">
+      <h3>
+        Değişen (yeniden açılan) <span className="cl-count">{items.length.toLocaleString('tr-TR')}</span>
+      </h3>
+      <p className="cl-group-note">
+        Kapandı olarak listelenip sonra aynı birim kimliğiyle yeniden açılan birimler.
+      </p>
+      {items.length === 0 ? (
+        <div className="cl-empty">Bu raporda yeniden açılan birim yok.</div>
+      ) : (
+        <div className="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kapanış</th>
+                <th>DETSİS No</th>
+                <th>Kapanan birim</th>
+                <th>Şimdiki birim</th>
+                <th>Değişenler</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i) => {
+                const diffs = i.degisiklikler || []
+                const nameChanged = diffs.some((d) => d.alan === 'Ad')
+                const rest = diffs.filter((d) => d.alan !== 'Ad' && d.alan !== 'DETSİS No')
+                const newNo = i.guncel?.detsisNo
+                return (
+                  <tr key={i.key}>
+                    <td className="mono">{fmtDay(i.kapanisTarihi)}</td>
+                    <td className="mono">
+                      {i.detsisNo}
+                      {newNo && String(newNo) !== String(i.detsisNo) && <> → {newNo}</>}
+                    </td>
+                    <td>
+                      {i.birimAdi}
+                      {i.idare && <span className="cl-tag">idare</span>}
+                      <div className="cl-sub" title={i.hiyerarsi}>
+                        {i.hiyerarsi}
+                      </div>
+                    </td>
+                    <td>
+                      {i.guncel?.birimAdi}
+                      <div className="cl-sub" title={i.guncel?.hiyerarsi}>
+                        {i.guncel?.hiyerarsi}
+                      </div>
+                    </td>
+                    <td>
+                      {rest.length > 0 ? (
+                        <ul className="cl-diff">
+                          {rest.map((d) => (
+                            <li key={d.alan}>
+                              <b>{d.alan}:</b> {d.eski} → {d.yeni}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : nameChanged ? (
+                        'Yalnızca adı değişti'
+                      ) : (
+                        'Aynı haliyle yeniden açıldı'
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

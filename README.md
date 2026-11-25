@@ -63,7 +63,14 @@ gösterir (kırmızı = aralarında idare düzeyinde kapanış var).
 
 - **Kaynak**: DETSİS "Birim Değişiklikleri" sayfasının kullandığı uç noktalar:
   `kapatilanbirimler/{gün}` (son N günde kapananlar) + `birimislemkunye/{birimTarihceId}`
-  (hiyerarşi, kategori, statü, adres).
+  (kapanıştaki hiyerarşi, kategori, statü, adres) + `birimkunye?birimId=…&kilometreTasiTarih=…`
+  (birimin bugünkü künyesi; 404 = hâlâ kapalı).
+- **Kapandı / Değişti**: DETSİS bazen kapattığı birimi günler sonra aynı birim kimliğiyle yeniden
+  açıyor (adı, üst birimi veya statüsü değişmiş; ör. müdürlük → başka müdürlüğe bağlı şeflik).
+  Son 30 günün kapanışları her kontrolde yeniden sorgulanır; yeniden açılanlar raporda
+  **Değişen (yeniden açılan)** grubunda kapanıştaki ve bugünkü haliyle, neyin değiştiğiyle
+  (ad, üst birim, statü, kategori, DETSİS no) listelenir. Kapandı bildirilen bir birim sonradan
+  açılırsa ayrıca bildirim gelir. CSV'de Durum, güncel ad/hiyerarşi ve değişiklik sütunları var.
 - **Zamanlama**: main process (`electron/closures.cjs`) uygulama açılışından birkaç saniye sonra
   ve sonra her 30 dk'da bakar; o takvim gününde başarılı kontrol yoksa tarar. Yani günde bir
   kontrol; hata olursa 30 dk sonra tekrar dener. Panelde **Şimdi kontrol et** ile elle tetiklenir.
